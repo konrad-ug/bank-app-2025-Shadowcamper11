@@ -1,8 +1,22 @@
-class Account:
+class Transfer_operations:
+    def __init__(self):
+        self.balance = 0
+
+    def incoming_transfer(self, amount):
+        if amount > 0 and amount:
+            self.balance += amount
+            
+    def outgoing_transfer(self, amount):
+        if amount > self.balance or amount < 0:
+            return False
+        else:
+            self.balance -= amount
+
+class Account(Transfer_operations):
     def __init__(self, first_name, last_name, pesel, promocode=None):
+        super().__init__()
         self.first_name = first_name
         self.last_name = last_name
-        self.balance = 0
         self.pesel = pesel if self.is_pesel_valid(pesel) else "Invalid"
         self.promocode = promocode 
         
@@ -49,3 +63,24 @@ class Account:
         if birth_year is None:
             return False
         return birth_year > 1960
+    
+    
+    
+
+class Company_Account(Transfer_operations):
+    def __init__(self, company_name, NIP):
+        super().__init__()
+        self.company_name = company_name
+        self.NIP = NIP if self.is_NIP_valid(NIP) else "Invalid"
+        
+
+    def is_NIP_valid(self, NIP):
+        if len(NIP) == 10 and NIP.isdigit():
+            return True
+        return False
+    
+            
+
+
+            
+    

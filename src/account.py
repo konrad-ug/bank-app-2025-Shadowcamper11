@@ -11,6 +11,19 @@ class Transfer_operations:
             return False
         else:
             self.balance -= amount
+    
+    def express_transfer(self, amount):
+        fee = 0
+        if isinstance(self, Company_Account):
+            fee = 5
+        elif isinstance(self, Account):
+            fee = 1
+        
+        if amount > self.balance:
+            return False
+
+        self.balance -= (amount + fee)
+        return True
 
 class Account(Transfer_operations):
     def __init__(self, first_name, last_name, pesel, promocode=None):

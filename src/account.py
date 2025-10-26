@@ -1,38 +1,15 @@
-class Transfer_operations:
-    def __init__(self):
-        self.balance = 0
+from src.operations import Transfer_operations
 
-    def incoming_transfer(self, amount):
-        if amount > 0 and amount:
-            self.balance += amount
-            
-    def outgoing_transfer(self, amount):
-        if amount > self.balance or amount < 0:
-            return False
-        else:
-            self.balance -= amount
-    
-    def express_transfer(self, amount):
-        fee = 0
-        if isinstance(self, Company_Account):
-            fee = 5
-        elif isinstance(self, Account):
-            fee = 1
-        
-        if amount > self.balance:
-            return False
 
-        self.balance -= (amount + fee)
-        return True
 
 class Account(Transfer_operations):
-    def __init__(self, first_name, last_name, pesel, promocode=None):
+    def __init__(self, first_name, last_name, pesel, promocode=None, fee=1):
         super().__init__()
         self.first_name = first_name
         self.last_name = last_name
         self.pesel = pesel if self.is_pesel_valid(pesel) else "Invalid"
         self.promocode = promocode 
-        
+        self.fee = fee
         if self.is_promocode_valid(promocode) and self.is_eligible_for_promotion():
             self.balance += 50
         
@@ -81,11 +58,12 @@ class Account(Transfer_operations):
     
 
 class Company_Account(Transfer_operations):
-    def __init__(self, company_name, NIP):
+    def __init__(self, company_name, NIP, fee =5):
         super().__init__()
         self.company_name = company_name
         self.NIP = NIP if self.is_NIP_valid(NIP) else "Invalid"
-        
+        self.fee = fee
+
 
     def is_NIP_valid(self, NIP):
         if len(NIP) == 10 and NIP.isdigit():

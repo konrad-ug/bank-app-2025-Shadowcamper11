@@ -1,4 +1,6 @@
 from src.account import Account
+from src.account import Company_Account
+from src.operations import Transfer_operations
 
 
 class TestAccount:
@@ -90,4 +92,67 @@ class TestAccount:
         account = Account("John", "Doe", "12345ABCDE1")
         assert account.is_eligible_for_promotion() is False
     
+
+class Test_Company_Create:
+    def test_company_creation(self):
+        account = Company_Account("Lockhead_Martin", "1234567890")
+        assert account.company_name == "Lockhead_Martin"
+        assert account.NIP == "1234567890"
+        assert account.balance == 0
+        
+    def NIP_length(self):
+        account = Company_Account("Lockhead_Martin", "1234567890")
+        assert account.NIP == "1234567890"
     
+    def NIP_too_long(self):
+        account = Company_Account("Lockhead_Martin", "12345678901")
+        assert account.NIP == "Invalid"
+    
+    def NIP_too_short(self):
+        account = Company_Account("Lockhead_Martin", "123456789")
+        assert account.NIP == "Invalid"
+    
+    def NIP_non_numeric(self):
+        account = Company_Account("Lockhead_Martin", "12345ABCDE")
+        assert account.NIP == "Invalid"
+    
+    def test_initial_balance(self):
+        account = Company_Account("Lockhead_Martin", "12345ABCDE")
+        assert account.balance == 0
+    
+        
+    def test_balance_incoming_transfer(self):
+        account = Company_Account("Lockhead_Martin", "12345ABCDE")
+        account.incoming_transfer(100)
+        assert account.balance == 100
+    
+    def test_balance_incoming_transfer(self):
+        account = Company_Account("Lockhead_Martin", "12345ABCDE")
+        account.incoming_transfer(-100)
+        assert account.balance == 0
+    
+    def test_balance_out_transfer(self):
+        account = Company_Account("Lockhead_Martin", "12345ABCDE")
+        account.incoming_transfer(100)
+        account.outgoing_transfer(30)
+        assert account.balance == 70
+    
+    def test_balance_without_money_outgoing_transfer(self):
+        account = Company_Account("Lockhead_Martin", "12345ABCDE")
+        account.incoming_transfer(20)
+        account.outgoing_transfer(50)
+        assert account.balance == 20
+    
+    def test_balance_without_money_outgoing_transfer(self):
+        account = Company_Account("Lockhead_Martin", "12345ABCDE")
+        account.outgoing_transfer(50)
+        assert account.balance == 0
+
+    def test_balance_outgoing_with_money(self):
+        account = Company_Account("Lockhead_Martin", "12345ABCDE")
+        account.balance += 100
+        account.outgoing_transfer(70)
+        assert account.balance == 30
+        
+    
+       

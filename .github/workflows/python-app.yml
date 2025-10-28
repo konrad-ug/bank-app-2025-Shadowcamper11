@@ -39,4 +39,4 @@ jobs:
         python3 -m coverage run --source=src -m pytest
     - name: coverage report
       run: |
-        python3 -m coverage report --fail-under=100
+        python3 -m coverage report --show --fail-under=100

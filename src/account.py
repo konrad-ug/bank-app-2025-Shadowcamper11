@@ -12,6 +12,7 @@ class Account(Transfer_operations):
         self.fee = fee
         if self.is_promocode_valid(promocode) and self.is_eligible_for_promotion():
             self.balance += 50
+            self.transaction_history.append(50)
         
         
         

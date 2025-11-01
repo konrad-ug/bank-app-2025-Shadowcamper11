@@ -105,6 +105,51 @@ class TestAccount:
         account = Account("John", "Doe", "05810112345")  
         assert account.get_birth_year_from_pesel() == 1805
     
+    def test_account_history_empty(self):
+        account = Account("John", "Doe", "12345678911")
+        assert account.transaction_history == []
+    
+    def test_account_history_with_promocode(self):
+        account = Account("John", "Doe", "65010112345", promocode="PROM_123")
+        assert account.transaction_history == [50.00]
+        assert len(account.transaction_history) == 1
+    
+    def test_account_history_one_transaction(self):
+        account = Account("John", "Doe", "12345678911")
+        account.incoming_transfer(100)
+        assert account.transaction_history == [100.00]
+        assert len(account.transaction_history) == 1
+        
+    def test_account_history_multiple_transactions(self):
+        account = Account("John", "Doe", "12345678911")
+        account.incoming_transfer(100)
+        account.outgoing_transfer(30)
+        account.incoming_transfer(50)
+        assert account.transaction_history == [100.00, -30.00, 50.00]
+        assert len(account.transaction_history) == 3
+    
+    def test_history_express_transfer(self):
+        account = Account("John", "Doe", "12345678911")
+        account.incoming_transfer(200)
+        account.express_transfer(50)
+        assert account.transaction_history == [200.00, -50.00, -1.00]
+        assert len(account.transaction_history) == 3
+    
+    def test_history_multiple_express_transfers(self):
+        account = Account("John", "Doe", "12345678911")
+        account.incoming_transfer(300)
+        account.express_transfer(100)
+        account.express_transfer(50)
+        assert account.transaction_history == [300.00, -100.00, -1.00, -50.00, -1.00]
+        assert len(account.transaction_history) == 5
+    
+    def test_failed_transfer_not_recorded(self):
+        account = Account("John", "Doe", "12345678911")
+        account.incoming_transfer(100)
+        account.outgoing_transfer(150)  
+        account.express_transfer(200)    
+        assert account.transaction_history == [100.00]
+        assert len(account.transaction_history) == 1
 
 class Test_Company_Create:
     def test_company_creation(self):
@@ -166,3 +211,44 @@ class Test_Company_Create:
         account.balance += 100
         account.outgoing_transfer(70)
         assert account.balance == 30
+    
+    def test_company_history_empty(self):
+        account = Company_Account("Lockhead_Martin", "1234567890")
+        assert account.transaction_history == []
+    
+    def test_company_history_one_transaction(self):
+        account = Company_Account("Lockhead_Martin", "1234567890")
+        account.incoming_transfer(100)
+        assert account.transaction_history == [100.00]
+        assert len(account.transaction_history) == 1
+    
+    def test_company_history_multiple_transactions(self):
+        account = Company_Account("Lockhead_Martin", "1234567890")
+        account.incoming_transfer(100)
+        account.outgoing_transfer(30)
+        account.incoming_transfer(50)
+        assert account.transaction_history == [100.00, -30.00, 50.00]
+        assert len(account.transaction_history) == 3
+    
+    def test_company_history_express_transfer(self):
+        account = Company_Account("Lockhead_Martin", "1234567890")
+        account.incoming_transfer(200)
+        account.express_transfer(50)
+        assert account.transaction_history == [200.00, -50.00, -5.00]
+        assert len(account.transaction_history) == 3
+    
+    def test_company_failed_transfer_not_recorded(self):
+        account = Company_Account("Lockhead_Martin", "1234567890")
+        account.incoming_transfer(100)
+        account.outgoing_transfer(150)
+        account.express_transfer(200)
+        assert account.transaction_history == [100.00]
+        assert len(account.transaction_history) == 1
+
+    def test_company_history_multiple_express_transfers(self):
+        account = Company_Account("Lockhead_Martin", "1234567890")
+        account.incoming_transfer(300)
+        account.express_transfer(100)
+        account.express_transfer(50)
+        assert account.transaction_history == [300.00, -100.00, -5.00, -50.00, -5.00]
+        assert len(account.transaction_history) == 5

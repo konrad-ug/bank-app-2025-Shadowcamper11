@@ -1,254 +1,234 @@
 from src.account import Account
 from src.account import Company_Account
 from src.operations import Transfer_operations
-
+import pytest
 
 class TestAccount:
-    def test_account_creation(self):
-        account = Account("John", "Doe", "12345678911")
+    
+    @pytest.fixture
+    def account(self):
+        return Account("John", "Doe", "12345678911")
+    
+    @pytest.fixture
+    def promo_account(self):
+        return Account("John", "Doe", "65010112345", promocode="PROM_123")
+    
+    @pytest.fixture
+    def account_with_balance(self, account):
+        account.incoming_transfer(1000)
+        return account
+    
+    def test_account_creation(self, account: Account):
         assert account.first_name == "John"
         assert account.last_name == "Doe"
         assert account.balance == 0
         assert account.pesel == "12345678911"
         assert account.promocode is None
-        
-    def test_pesel_length(self):
-        account = Account("John", "Doe", "12345678911")
-        assert account.pesel == "12345678911"
-        
-    def test_pesel_too_long(self):
-        account = Account("John", "Doe", "123456789112")
-        assert account.pesel == "Invalid"
-    
-    def test_pesel_too_short(self):
-        account = Account("John", "Doe", "1234567891")
-        assert account.pesel == "Invalid"
-    
-    def test_pesel_non_numeric(self):
-        account = Account("John", "Doe", "12345ABCDE1")
-        assert account.pesel == "Invalid"
-        
-    def test_promocode_valid(self):
-        account = Account("John", "Doe", "90010112345", promocode="PROM_123")
-        assert account.balance == 50
-    
-    def test_promocode_none(self):
-        account = Account("John", "Doe", "12345678911", promocode=None)
-        assert account.balance == 0
 
-    def test_promocode_invalid_format(self):
-        account = Account("John", "Doe", "12345678911", promocode="PROMO123")
-        assert account.balance == 0
+    @pytest.mark.parametrize("pesel,expected", [
+        ("12345678911", "12345678911"),
+        ("123456789112", "Invalid"),
+        ("1234567891", "Invalid"),
+        ("12345ABCDE1", "Invalid"),
+    ])
+    def test_pesel_validation(self, pesel, expected):
+        account = Account("John", "Doe", pesel)
+        assert account.pesel == expected
 
-    def test_promocode_invalid_prefix(self):
-        account = Account("John", "Doe", "12345678911", promocode="INVALID_123")
-        assert account.balance == 0
-        
-    def test_promocode_invalid_suffix(self):
-        account = Account("John", "Doe", "12345678911", promocode="PROM_9992")
-        assert account.balance == 0
-        
-    def test_promocode_valid_born_after_1960(self):
-        account = Account("John", "Doe", "65010112345", promocode="PROM_123")
-        assert account.balance == 50
-    
-    def test_promocode_valid_born_before_1960(self):
-        account = Account("John", "Doe", "59010112345", promocode="PROM_123")
-        assert account.balance == 0
-    
-    def test_promocode_valid_exactly_1960(self):
-        account = Account("John", "Doe", "60010112345", promocode="PROM_123")
-        assert account.balance == 0
-        
-    def test_birth_year_extraction_1900s(self):
-        account = Account("John", "Doe", "65010112345")
-        assert account.get_birth_year_from_pesel() == 1965
-    
-    def test_birth_year_extraction_2000s(self):
-        account = Account("John", "Doe", "02210112345")
-        assert account.get_birth_year_from_pesel() == 2002
-    
-    def test_birth_year_invalid_pesel(self):
-        account = Account("John", "Doe", "12345ABCDE1")
-        assert account.get_birth_year_from_pesel() is None
-    
-    def test_birth_year_invalid_month(self):
-        account = Account("John", "Doe", "99130112345")
-        assert account.get_birth_year_from_pesel() is None
-    
-    def test_promotion_eligibility_true(self):
-        account = Account("John", "Doe", "65010112345")
-        assert account.is_eligible_for_promotion() is True
-        
-    def test_promotion_eligibility_false(self):
-        account = Account("John", "Doe", "59010112345")
-        assert account.is_eligible_for_promotion() is False
-    
-    def test_promotion_eligibility_born_in_1960(self):
-        account = Account("John", "Doe", "60010112345")
-        assert account.is_eligible_for_promotion() is False
-    
-    def test_promotion_eligibility_invalid_pesel(self):
-        account = Account("John", "Doe", "12345ABCDE1")
-        assert account.is_eligible_for_promotion() is False
-    
+    @pytest.mark.parametrize("promocode,birth_pesel,expected_balance", [
+        ("PROM_123", "90010112345", 50),
+        ("PROM_123", "59010112345", 0),
+        ("PROM_123", "60010112345", 0),
+        (None, "12345678911", 0),
+        ("PROMO123", "12345678911", 0),
+        ("INVALID_123", "12345678911", 0),
+        ("PROM_9992", "12345678911", 0),
+    ])
+    def test_promocode_scenarios(self, promocode, birth_pesel, expected_balance):
+        account = Account("John", "Doe", birth_pesel, promocode=promocode)
+        assert account.balance == expected_balance
 
-    def test_birth_year_extraction_2100s(self):
-        account = Account("John", "Doe", "05410112345")
-        assert account.get_birth_year_from_pesel() == 2105
-    
-    def test_birth_year_extraction_2200s(self):
-        account = Account("John", "Doe", "05610112345")  
-        assert account.get_birth_year_from_pesel() == 2205
-    
-    def test_birth_year_extraction_1800s(self):
-        account = Account("John", "Doe", "05810112345")  
-        assert account.get_birth_year_from_pesel() == 1805
-    
-    def test_account_history_empty(self):
-        account = Account("John", "Doe", "12345678911")
+    @pytest.mark.parametrize("pesel,expected_year", [
+        ("65010112345", 1965),
+        ("02210112345", 2002),
+        ("05410112345", 2105),
+        ("05610112345", 2205),
+        ("05810112345", 1805),
+        ("12345ABCDE1", None),
+        ("99130112345", None),
+    ])
+    def test_birth_year_extraction(self, pesel, expected_year):
+        account = Account("John", "Doe", pesel)
+        assert account.get_birth_year_from_pesel() == expected_year
+
+    @pytest.mark.parametrize("pesel,expected", [
+        ("65010112345", True),
+        ("59010112345", False),
+        ("60010112345", False),
+        ("12345ABCDE1", False),
+    ])
+    def test_promotion_eligibility(self, pesel, expected):
+        account = Account("John", "Doe", pesel)
+        assert account.is_eligible_for_promotion() is expected
+
+    def test_account_history_empty(self, account: Account):
         assert account.transaction_history == []
     
-    def test_account_history_with_promocode(self):
-        account = Account("John", "Doe", "65010112345", promocode="PROM_123")
-        assert account.transaction_history == [50.00]
-        assert len(account.transaction_history) == 1
-    
-    def test_account_history_one_transaction(self):
-        account = Account("John", "Doe", "12345678911")
-        account.incoming_transfer(100)
-        assert account.transaction_history == [100.00]
-        assert len(account.transaction_history) == 1
-        
-    def test_account_history_multiple_transactions(self):
-        account = Account("John", "Doe", "12345678911")
-        account.incoming_transfer(100)
-        account.outgoing_transfer(30)
-        account.incoming_transfer(50)
-        assert account.transaction_history == [100.00, -30.00, 50.00]
-        assert len(account.transaction_history) == 3
-    
-    def test_history_express_transfer(self):
-        account = Account("John", "Doe", "12345678911")
-        account.incoming_transfer(200)
-        account.express_transfer(50)
-        assert account.transaction_history == [200.00, -50.00, -1.00]
-        assert len(account.transaction_history) == 3
-    
-    def test_history_multiple_express_transfers(self):
-        account = Account("John", "Doe", "12345678911")
-        account.incoming_transfer(300)
-        account.express_transfer(100)
-        account.express_transfer(50)
-        assert account.transaction_history == [300.00, -100.00, -1.00, -50.00, -1.00]
-        assert len(account.transaction_history) == 5
-    
-    def test_failed_transfer_not_recorded(self):
-        account = Account("John", "Doe", "12345678911")
-        account.incoming_transfer(100)
-        account.outgoing_transfer(150)  
-        account.express_transfer(200)    
-        assert account.transaction_history == [100.00]
-        assert len(account.transaction_history) == 1
+    def test_account_history_with_promocode(self, promo_account):
+        assert promo_account.transaction_history == [50.00]
+        assert len(promo_account.transaction_history) == 1
 
-class Test_Company_Create:
-    def test_company_creation(self):
-        account = Company_Account("Lockhead_Martin", "1234567890")
-        assert account.company_name == "Lockhead_Martin"
-        assert account.NIP == "1234567890"
-        assert account.balance == 0
-        
-    def test_NIP_length(self): 
-        account = Company_Account("Lockhead_Martin", "1234567890")
-        assert account.NIP == "1234567890"
-    
-    def test_NIP_too_long(self): 
-        account = Company_Account("Lockhead_Martin", "12345678901")
-        assert account.NIP == "Invalid"
-    
-    def test_NIP_too_short(self):  
-        account = Company_Account("Lockhead_Martin", "123456789")
-        assert account.NIP == "Invalid"
-    
-    def test_NIP_non_numeric(self): 
-        account = Company_Account("Lockhead_Martin", "12345ABCDE")
-        assert account.NIP == "Invalid"
-    
-    def test_initial_balance(self):
-        account = Company_Account("Lockhead_Martin", "12345ABCDE")
-        assert account.balance == 0
-    
-        
-    def test_balance_incoming_transfer(self):
-        account = Company_Account("Lockhead_Martin", "12345ABCDE")
-        account.incoming_transfer(100)
-        assert account.balance == 100
-    
-    def test_balance_incoming_transfer_negative(self): 
-        account = Company_Account("Lockhead_Martin", "12345ABCDE")
-        account.incoming_transfer(-100)
-        assert account.balance == 0
-    
-    def test_balance_out_transfer(self):
-        account = Company_Account("Lockhead_Martin", "12345ABCDE")
-        account.incoming_transfer(100)
-        account.outgoing_transfer(30)
-        assert account.balance == 70
-    
-    def test_balance_without_money_outgoing_transfer(self):
-        account = Company_Account("Lockhead_Martin", "12345ABCDE")
-        account.incoming_transfer(20)
-        account.outgoing_transfer(50)
-        assert account.balance == 20
-    
-    def test_balance_without_money_outgoing_transfer_zero_balance(self):
-        account = Company_Account("Lockhead_Martin", "12345ABCDE")
-        account.outgoing_transfer(50)
-        assert account.balance == 0
+    @pytest.mark.parametrize("transactions,expected_history,expected_length", [
+        ([100], [100.00], 1),
+        ([100, -30, 50], [100.00, -30.00, 50.00], 3),
+        ([200, -50, -1], [200.00, -50.00, -1.00], 3),
+        ([300, -100, -1, -50, -1], [300.00, -100.00, -1.00, -50.00, -1.00], 5),
+    ])
+    def test_transaction_history(self, account, transactions, expected_history, expected_length):
+        for i, amount in enumerate(transactions):
+            if amount > 0:
+                account.incoming_transfer(amount)
+            elif i > 0 and transactions[i-1] > 0 and amount == -1:
+                account.express_transfer(transactions[i-1])
+                break
+            else:
+                account.outgoing_transfer(-amount)
+        assert account.transaction_history == expected_history
+        assert len(account.transaction_history) == expected_length
 
-    def test_balance_outgoing_with_money(self):
-        account = Company_Account("Lockhead_Martin", "12345ABCDE")
-        account.balance += 100
-        account.outgoing_transfer(70)
-        assert account.balance == 30
-    
-    def test_company_history_empty(self):
-        account = Company_Account("Lockhead_Martin", "1234567890")
-        assert account.transaction_history == []
-    
-    def test_company_history_one_transaction(self):
-        account = Company_Account("Lockhead_Martin", "1234567890")
-        account.incoming_transfer(100)
-        assert account.transaction_history == [100.00]
-        assert len(account.transaction_history) == 1
-    
-    def test_company_history_multiple_transactions(self):
-        account = Company_Account("Lockhead_Martin", "1234567890")
-        account.incoming_transfer(100)
-        account.outgoing_transfer(30)
-        account.incoming_transfer(50)
-        assert account.transaction_history == [100.00, -30.00, 50.00]
-        assert len(account.transaction_history) == 3
-    
-    def test_company_history_express_transfer(self):
-        account = Company_Account("Lockhead_Martin", "1234567890")
-        account.incoming_transfer(200)
-        account.express_transfer(50)
-        assert account.transaction_history == [200.00, -50.00, -5.00]
-        assert len(account.transaction_history) == 3
-    
-    def test_company_failed_transfer_not_recorded(self):
-        account = Company_Account("Lockhead_Martin", "1234567890")
+    def test_failed_transfer_not_recorded(self, account: Account):
         account.incoming_transfer(100)
         account.outgoing_transfer(150)
         account.express_transfer(200)
         assert account.transaction_history == [100.00]
         assert len(account.transaction_history) == 1
 
-    def test_company_history_multiple_express_transfers(self):
-        account = Company_Account("Lockhead_Martin", "1234567890")
-        account.incoming_transfer(300)
-        account.express_transfer(100)
-        account.express_transfer(50)
-        assert account.transaction_history == [300.00, -100.00, -5.00, -50.00, -5.00]
-        assert len(account.transaction_history) == 5
+    @pytest.mark.parametrize("loan_amount,expected_result,expected_balance", [
+        (-100, False, 0),
+        (0, False, 0),
+    ])
+    def test_loan_invalid_amount(self, account, loan_amount, expected_result, expected_balance):
+        result = account.submit_for_loan(loan_amount)
+        assert result is expected_result
+        assert account.balance == expected_balance
+        assert len(account.transaction_history) == 0
+
+    @pytest.mark.parametrize("transactions,loan_amount,expected_result,expected_balance", [
+        ([100, 200, 300], 500, True, 1100),
+        ([100, 150, 200], 400, True, 850),
+        ([100, -50, 200], 150, False, 250),
+        ([100, 50, 200, 30, 150], 100, True, 630),
+        ([100, -50, 200, -30], 100, False, 220),
+        ([100, 150, 200, -50, 30], 1000, False, 430),
+        ([100, -50, 200, -30, 150], 100, True, 470),
+    ])
+    def test_loan_scenarios(self, account, transactions, loan_amount, expected_result, expected_balance):
+        for amount in transactions:
+            if amount > 0:
+                account.incoming_transfer(amount)
+            else:
+                account.outgoing_transfer(-amount)
+        
+        result = account.submit_for_loan(loan_amount)
+        assert result is expected_result
+        assert account.balance == expected_balance
+        
+        if expected_result:
+            assert account.transaction_history[-1] == loan_amount
+
+    def test_submit_for_loan_insufficient_history(self, account: Account):
+        account.incoming_transfer(100)
+        result = account.submit_for_loan(200)
+        assert result is False
+        assert account.balance == 100
+        assert len(account.transaction_history) == 1
+
+
+class TestCompanyAccount:
+    
+    @pytest.fixture
+    def company(self):
+        return Company_Account("Lockhead_Martin", "1234567890")
+
+    def test_company_creation(self, company):
+        assert company.company_name == "Lockhead_Martin"
+        assert company.NIP == "1234567890"
+        assert company.balance == 0
+
+    @pytest.mark.parametrize("nip,expected", [
+        ("1234567890", "1234567890"),
+        ("12345678901", "Invalid"),
+        ("123456789", "Invalid"),
+        ("12345ABCDE", "Invalid"),
+    ])
+    def test_nip_validation(self, nip, expected):
+        company = Company_Account("Test", nip)
+        assert company.NIP == expected
+
+    @pytest.mark.parametrize("initial_transfer,outgoing_amount,expected_balance", [
+        (100, 30, 70),
+        (20, 50, 20),
+        (0, 50, 0),
+    ])
+    def test_balance_operations(self, company, initial_transfer, outgoing_amount, expected_balance):
+        if initial_transfer > 0:
+            company.incoming_transfer(initial_transfer)
+        company.outgoing_transfer(outgoing_amount)
+        assert company.balance == expected_balance
+
+    def test_balance_incoming_transfer_negative(self, company):
+        company.incoming_transfer(-100)
+        assert company.balance == 0
+
+    def test_balance_outgoing_with_added_money(self, company):
+        company.balance += 100
+        company.outgoing_transfer(70)
+        assert company.balance == 30
+
+    def test_company_history_empty(self, company):
+        assert company.transaction_history == []
+
+    @pytest.mark.parametrize("transactions,expected_history,expected_length", [
+        ([100], [100.00], 1),
+        ([100, -30, 50], [100.00, -30.00, 50.00], 3),
+        ([200, -50, -5], [200.00, -50.00, -5.00], 3),
+        ([300, -100, -5, -50, -5], [300.00, -100.00, -5.00, -50.00, -5.00], 5),
+    ])
+    def test_company_transaction_history(self, company, transactions, expected_history, expected_length):
+        i = 0
+        while i < len(transactions):
+            amount = transactions[i]
+        
+            if amount > 0:
+                company.incoming_transfer(amount)
+                i += 1
+            elif amount == -5:
+                prev_amount = None
+                j = i - 1
+                while j >= 0:
+                    if transactions[j] < 0 and transactions[j] != -5:
+                        prev_amount = -transactions[j]
+                        break
+                    j -= 1
+            
+                if prev_amount:
+                    company.express_transfer(prev_amount)
+                i += 1
+            elif amount < 0 and amount != -5:
+                if i + 1 < len(transactions) and transactions[i + 1] == -5:
+                    i += 1
+                else:
+                    company.outgoing_transfer(-amount)
+                    i += 1
+            else:
+                i += 1
+            
+        assert company.transaction_history == expected_history
+        assert len(company.transaction_history) == expected_length
+
+    def test_company_failed_transfer_not_recorded(self, company):
+        company.incoming_transfer(100)
+        company.outgoing_transfer(150)
+        company.express_transfer(200)
+        assert company.transaction_history == [100.00]
+        assert len(company.transaction_history) == 1

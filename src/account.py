@@ -56,8 +56,28 @@ class Account(Transfer_operations):
         return birth_year > 1960
     
     
+    def submit_for_loan(self, amount):
+        if amount <= 0:
+            return False
+        
+        if len(self.transaction_history) >= 3:
+            last_three_transactions = self.transaction_history[-3:]
+            if all(tx > 0 for tx in last_three_transactions):
+                self.balance += amount
+                self.transaction_history.append(amount)
+                return True
+            
+        if len(self.transaction_history) >= 5:
+            last_five_transactions = self.transaction_history[-5:]
+            if sum(last_five_transactions) > amount:
+                self.balance += amount
+                self.transaction_history.append(amount)
+                return True
+            else: 
+                return False
+        
+        return False
     
-
 class Company_Account(Transfer_operations):
     def __init__(self, company_name, NIP, fee =5):
         super().__init__()

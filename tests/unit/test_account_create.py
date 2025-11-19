@@ -232,3 +232,128 @@ class TestCompanyAccount:
         company.express_transfer(200)
         assert company.transaction_history == [100.00]
         assert len(company.transaction_history) == 1
+ 
+    @pytest.mark.parametrize("loan_amount,expected_result,expected_balance", [
+        (-100, False, 0),
+        (0, False, 0),
+    ])
+    def test_take_loan_invalid_amount(self, company, loan_amount, expected_result, expected_balance):
+        company.incoming_transfer(5000)
+        company.outgoing_transfer(1775)
+        result = company.take_loan(loan_amount)
+        assert result is expected_result
+        assert company.balance == 3225
+
+    @pytest.mark.parametrize("balance,has_zus,loan_amount,expected_result", [
+        (10000, True, 4000, True),    # 8225 >= 8000
+        (10000, True, 5000, False),   # 8225 < 10000
+        (6000, True, 2000, True),     # 4225 >= 4000
+        (6000, False, 2000, False),   # Brak ZUS 
+        (4000, True, 1000, True),     # 2225 >= 2000 
+        (3000, True, 1000, False),    # 1225 < 2000
+        (8000, True, 4000, False),    # 6225 < 8000
+        (10000, False, 1000, False),  # Brak ZUS
+    ])
+    def test_take_loan_scenarios(self, company, balance, has_zus, loan_amount, expected_result):
+        company.incoming_transfer(balance)
+        if has_zus:
+            company.outgoing_transfer(1775)  # ZUS
+        else:
+            company.outgoing_transfer(500)   # Inny przelew
+        
+        initial_balance = company.balance
+        result = company.take_loan(loan_amount)
+        
+        assert result is expected_result
+        if expected_result:
+            assert company.balance == initial_balance + loan_amount
+            assert company.transaction_history[-1] == loan_amount
+        else:
+            assert company.balance == initial_balance
+            assert loan_amount not in company.transaction_history
+
+    @pytest.mark.parametrize("zus_transfers,other_transfers,loan_amount,expected_result", [
+        ([1775], [], 2000, True),           # Jeden ZUS
+        ([1775, 1775], [], 3000, True),     # Dwa ZUS
+        ([], [1000, 500], 1000, False),     # Brak ZUS
+        ([1775], [500, 200], 2000, True),   # ZUS + inne
+        ([1700], [], 1000, False),          # Prawie ZUS
+        ([1775, 1700], [], 2000, True),     # ZUS + prawie ZUS
+    ])
+    def test_take_loan_zus_variations(self, company, zus_transfers, other_transfers, loan_amount, expected_result):
+        company.incoming_transfer(10000)
+        
+        for amount in zus_transfers + other_transfers:
+            company.outgoing_transfer(amount)
+        
+        initial_balance = company.balance
+        result = company.take_loan(loan_amount)
+        
+        assert result is expected_result
+        if expected_result:
+            assert company.balance == initial_balance + loan_amount
+        else:
+            assert company.balance == initial_balance
+
+    @pytest.mark.parametrize("setup_balance,setup_zus,exact_multiplier", [
+        (5000, True, 2.0),   # Dokładnie 2x
+        (6000, True, 2.5),   # Więcej niż 2x  
+        (4500, True, 1.9),   # Mniej niż 2x
+    ])
+    def test_take_loan_balance_edge_cases(self, company, setup_balance, setup_zus, exact_multiplier):
+        company.incoming_transfer(setup_balance)
+        if setup_zus:
+            company.outgoing_transfer(1775)
+        
+        current_balance = company.balance
+        loan_amount = int(current_balance / exact_multiplier)
+        
+        result = company.take_loan(loan_amount)
+        expected_result = setup_zus and (current_balance >= 2 * loan_amount)
+        
+        assert result is expected_result
+
+    def test_take_loan_with_express_zus(self, company):
+        company.incoming_transfer(10000)
+        company.express_transfer(1775)  # ZUS przez express
+        
+        result = company.take_loan(4000)  # 8220 >= 8000
+        assert result is True
+        assert company.balance == 12220  # 8220 + 4000
+        assert -1775 in company.transaction_history
+        assert -5 in company.transaction_history
+
+    def test_take_loan_multiple_attempts(self, company):
+        company.incoming_transfer(10000)
+        company.outgoing_transfer(1775)  # ZUS
+        
+        result1 = company.take_loan(2000)  # 8225 >= 4000 
+        assert result1 is True
+        assert company.balance == 10225
+        
+        result2 = company.take_loan(6000)  # 10225 < 12000 
+        assert result2 is False
+        assert company.balance == 10225  # Bez zmian
+
+    @pytest.mark.parametrize("mixed_operations", [
+        ([("incoming", 8000), ("outgoing", 1775), ("express", 500)]),
+        ([("incoming", 10000), ("express", 1775), ("incoming", 2000)]),
+        ([("incoming", 5000), ("outgoing", 500), ("outgoing", 1775), ("incoming", 3000)]),
+    ])
+    def test_take_loan_mixed_operations(self, company, mixed_operations):
+        for operation, amount in mixed_operations:
+            if operation == "incoming":
+                company.incoming_transfer(amount)
+            elif operation == "outgoing":
+                company.outgoing_transfer(amount)
+            elif operation == "express":
+                company.express_transfer(amount)
+        
+        has_zus = -1775 in company.transaction_history
+        current_balance = company.balance
+        loan_amount = 2000
+        
+        result = company.take_loan(loan_amount)
+        expected_result = has_zus and (current_balance >= 2 * loan_amount)
+        
+        assert result is expected_result

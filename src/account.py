@@ -1,5 +1,31 @@
 from src.operations import Transfer_operations
 
+class AccountRegistry:
+    def __init__(self):
+        self.accounts = []
+    
+    def __iter__(self):
+        return iter(self.accounts)
+    
+    def add_account(self, account):
+        if isinstance(account, Account):
+            self.accounts.append(account)
+            return True
+        else:
+            return False
+        
+    
+    def find_account_by_pesel(self, pesel):
+        for account in self.accounts:
+            if account.pesel == pesel:
+                return account
+        return None
+
+    def get_all_accounts(self):
+        return self.accounts.copy()
+    
+    def get_accounts_count(self):
+        return len(self.accounts)
 
 
 class Account(Transfer_operations):
@@ -92,6 +118,17 @@ class Company_Account(Transfer_operations):
         return False
     
             
+    def take_loan(self, amount):
+        if amount <= 0:
+            return False
+
+        if self.balance < amount *2:
+            return False
+        if -1775 not in self.transaction_history:
+            return False
+        self.balance += amount
+        self.transaction_history.append(amount)
+        return True
 
 
             

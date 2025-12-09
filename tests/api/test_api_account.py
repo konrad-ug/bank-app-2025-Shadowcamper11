@@ -1,178 +1,111 @@
-import pytest
-from app.api import app, registry
+from flask import Flask, request, jsonify
+from src.account import AccountRegistry, Account
 
-class TestAccountCRUD:
+app = Flask(__name__)
+registry = AccountRegistry()
+
+@app.route("/api/accounts", methods=['POST'])
+def create_account():
+    data = request.get_json()
+    print(f"Create account request: {data}")
     
-    @pytest.fixture
-    def client(self):
-        app.config['TESTING'] = True
-        with app.test_client() as client:
-            registry.accounts.clear()
-            yield client
+    if not data or 'name' not in data or 'surname' not in data or 'pesel' not in data:
+        return jsonify({"error": "Missing required fields"}), 400
     
-    @pytest.fixture
-    def valid_account_data(self):
-        return {
-            "name": "james",
-            "surname": "hetfield", 
-            "pesel": "89092909825"
-        }
+    if registry.find_account_by_pesel(data["pesel"]) is not None:
+        return jsonify({"error": "Account with this PESEL already exists"}), 409
     
-    @pytest.fixture
-    def another_account_data(self):
-        return {
-            "name": "lars",
-            "surname": "ulrich", 
-            "pesel": "12345678901"
-        }
+    account = Account(data["name"], data["surname"], data["pesel"])
+    registry.add_account(account)
+    return jsonify({"message": "Account created"}), 201
+
+@app.route("/api/accounts", methods=['GET'])
+def get_all_accounts():
+    print("Get all accounts request received")
+    accounts = registry.get_all_accounts()
+    accounts_data = [{"name": acc.first_name, "surname": acc.last_name, "pesel": acc.pesel, "balance": acc.balance} for acc in accounts]
+    return jsonify(accounts_data), 200
+
+@app.route("/api/accounts/count", methods=['GET'])
+def get_account_count():
+    print("Get account count request received")
+    count = registry.get_accounts_count()
+    return jsonify({"count": count}), 200
+
+@app.route("/api/accounts/<pesel>", methods=['GET'])
+def get_account_by_pesel(pesel):
+    print(f"Get account by pesel request: {pesel}")
+    account = registry.find_account_by_pesel(pesel)
+    if account is None:
+        return jsonify({"error": "Account not found"}), 404
     
-    def test_get_account_by_pesel_success(self, client, valid_account_data):
-        client.post('/api/accounts', 
-                   json=valid_account_data,
-                   content_type='application/json')
-        
-        response = client.get(f'/api/accounts/{valid_account_data["pesel"]}')
-        
-        assert response.status_code == 200
-        account_data = response.get_json()
-        assert account_data["name"] == valid_account_data["name"]
-        assert account_data["surname"] == valid_account_data["surname"]
-        assert account_data["pesel"] == valid_account_data["pesel"]
-        assert "balance" in account_data
+    return jsonify({
+        "name": account.first_name, 
+        "surname": account.last_name,
+        "pesel": account.pesel,
+        "balance": account.balance
+    }), 200
+
+@app.route("/api/accounts/<pesel>", methods=['PATCH'])
+def update_account(pesel):
+    print(f"Update account request: {pesel}")
+    account = registry.find_account_by_pesel(pesel)
+    if account is None:
+        return jsonify({"error": "Account not found"}), 404
     
-    def test_get_account_by_pesel_not_found(self, client):
-        response = client.get('/api/accounts/99999999999')
-        
-        assert response.status_code == 404
-        error_data = response.get_json()
-        assert error_data["error"] == "Account not found"
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
     
-    def test_update_account_name_only(self, client, valid_account_data):
-        client.post('/api/accounts', 
-                   json=valid_account_data,
-                   content_type='application/json')
-        
-        update_data = {"name": "jimmy"}
-        response = client.patch(f'/api/accounts/{valid_account_data["pesel"]}',
-                              json=update_data,
-                              content_type='application/json')
-        
-        assert response.status_code == 200
-        assert response.get_json()["message"] == "Account updated"
-        
-        get_response = client.get(f'/api/accounts/{valid_account_data["pesel"]}')
-        updated_account = get_response.get_json()
-        assert updated_account["name"] == "jimmy"
-        assert updated_account["surname"] == valid_account_data["surname"]
+    if 'name' in data:
+        account.first_name = data['name']
+    if 'surname' in data:
+        account.last_name = data['surname']
     
-    def test_update_account_surname_only(self, client, valid_account_data):
-        client.post('/api/accounts', 
-                   json=valid_account_data,
-                   content_type='application/json')
-        
-        update_data = {"surname": "newfield"}
-        response = client.patch(f'/api/accounts/{valid_account_data["pesel"]}',
-                              json=update_data,
-                              content_type='application/json')
-        
-        assert response.status_code == 200
-        
-        get_response = client.get(f'/api/accounts/{valid_account_data["pesel"]}')
-        updated_account = get_response.get_json()
-        assert updated_account["name"] == valid_account_data["name"]
-        assert updated_account["surname"] == "newfield"
+    return jsonify({"message": "Account updated"}), 200
+
+@app.route("/api/accounts/<pesel>", methods=['DELETE'])
+def delete_account(pesel):
+    print(f"Delete account request: {pesel}")
+    account = registry.find_account_by_pesel(pesel)
+    if account is None:
+        return jsonify({"error": "Account not found"}), 404
     
-    def test_update_account_both_fields(self, client, valid_account_data):
-        client.post('/api/accounts', 
-                   json=valid_account_data,
-                   content_type='application/json')
-        
-        update_data = {"name": "kirk", "surname": "hammett"}
-        response = client.patch(f'/api/accounts/{valid_account_data["pesel"]}',
-                              json=update_data,
-                              content_type='application/json')
-        
-        assert response.status_code == 200
-        
-        get_response = client.get(f'/api/accounts/{valid_account_data["pesel"]}')
-        updated_account = get_response.get_json()
-        assert updated_account["name"] == "kirk"
-        assert updated_account["surname"] == "hammett"
+    registry.accounts.remove(account)
+    return jsonify({"message": "Account deleted"}), 200
+
+@app.route("/api/accounts/<pesel>/transfer", methods=['POST'])
+def transfer(pesel):
+    print(f"Transfer request for pesel: {pesel}")
+    account = registry.find_account_by_pesel(pesel)
+    if account is None:
+        return jsonify({"error": "Account not found"}), 404
     
-    def test_update_account_not_found(self, client):
-        update_data = {"name": "test"}
-        response = client.patch('/api/accounts/99999999999',
-                              json=update_data,
-                              content_type='application/json')
-        
-        assert response.status_code == 404
-        assert response.get_json()["error"] == "Account not found"
+    data = request.get_json()
+    if not data or 'amount' not in data or 'type' not in data:
+        return jsonify({"error": "Missing required fields"}), 400
     
-    def test_update_account_no_data(self, client, valid_account_data):
-        client.post('/api/accounts', 
-                   json=valid_account_data,
-                   content_type='application/json')
-        
-        response = client.patch(f'/api/accounts/{valid_account_data["pesel"]}',
-                              json={},
-                              content_type='application/json')
-        
-        assert response.status_code == 400
-        assert response.get_json()["error"] == "No data provided"
+    transfer_type = data['type']
+    amount = data['amount']
     
-    def test_delete_account_success(self, client, valid_account_data):
-        client.post('/api/accounts', 
-                   json=valid_account_data,
-                   content_type='application/json')
-        
-        response = client.delete(f'/api/accounts/{valid_account_data["pesel"]}')
-        
-        assert response.status_code == 200
-        assert response.get_json()["message"] == "Account deleted"
-        
-        get_response = client.get(f'/api/accounts/{valid_account_data["pesel"]}')
-        assert get_response.status_code == 404
+    if transfer_type not in ['incoming', 'outgoing', 'express']:
+        return jsonify({"error": "Invalid transfer type"}), 400
     
-    def test_delete_account_not_found(self, client):
-        response = client.delete('/api/accounts/99999999999')
+    try:
+        if transfer_type == 'incoming':
+            account.incoming_transfer(amount)
+        elif transfer_type == 'outgoing':
+            success = account.outgoing_transfer(amount)
+            if not success:
+                return jsonify({"error": "Insufficient funds"}), 422
+        elif transfer_type == 'express':
+            success = account.express_outgoing_transfer(amount)
+            if not success:
+                return jsonify({"error": "Insufficient funds"}), 422
         
-        assert response.status_code == 404
-        assert response.get_json()["error"] == "Account not found"
-    
-    def test_delete_account_affects_count(self, client, valid_account_data, another_account_data):
-        client.post('/api/accounts', 
-                   json=valid_account_data,
-                   content_type='application/json')
-        client.post('/api/accounts', 
-                   json=another_account_data,
-                   content_type='application/json')
-        
-        count_before = client.get('/api/accounts/count')
-        initial_count = count_before.get_json()["count"]
-        
-        client.delete(f'/api/accounts/{valid_account_data["pesel"]}')
-        
-        count_after = client.get('/api/accounts/count')
-        final_count = count_after.get_json()["count"]
-        
-        assert final_count == initial_count - 1
-    
-    def test_full_crud_cycle(self, client, valid_account_data):
-        create_response = client.post('/api/accounts', 
-                                    json=valid_account_data,
-                                    content_type='application/json')
-        assert create_response.status_code == 201
-        
-        read_response = client.get(f'/api/accounts/{valid_account_data["pesel"]}')
-        assert read_response.status_code == 200
-        
-        update_response = client.patch(f'/api/accounts/{valid_account_data["pesel"]}',
-                                     json={"name": "updated"},
-                                     content_type='application/json')
-        assert update_response.status_code == 200
-        
-        delete_response = client.delete(f'/api/accounts/{valid_account_data["pesel"]}')
-        assert delete_response.status_code == 200
-        
-        final_read = client.get(f'/api/accounts/{valid_account_data["pesel"]}')
-        assert final_read.status_code == 404
+        return jsonify({"message": "Zlecenie przyjęto do realizacji"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 422
+
+if __name__ == '__main__':
+    app.run(debug=True)

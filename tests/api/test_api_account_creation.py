@@ -1,5 +1,5 @@
 import pytest
-from app.api import app
+from app.api import app, registry
 
 class TestAccountCreationAPI:
     
@@ -7,6 +7,7 @@ class TestAccountCreationAPI:
     def client(self):
         app.config['TESTING'] = True
         with app.test_client() as client:
+            registry.accounts.clear()
             yield client
     
     @pytest.fixture
@@ -86,3 +87,67 @@ class TestAccountCreationAPI:
         assert created_account["name"] == valid_account_data["name"]
         assert created_account["surname"] == valid_account_data["surname"]
         assert created_account["balance"] == 0
+    
+    def test_create_account_with_duplicate_pesel_returns_409(self, client, valid_account_data):
+        first_response = client.post('/api/accounts',
+                                     json=valid_account_data,
+                                     content_type='application/json')
+        assert first_response.status_code == 201
+        
+        duplicate_response = client.post('/api/accounts',
+                                         json=valid_account_data,
+                                         content_type='application/json')
+        
+        assert duplicate_response.status_code == 409
+        error_data = duplicate_response.get_json()
+        assert "already exists" in error_data["error"]
+    
+    def test_create_account_with_duplicate_pesel_different_names(self, client):
+        first_account = {
+            "name": "john",
+            "surname": "doe",
+            "pesel": "12345678911"
+        }
+        first_response = client.post('/api/accounts',
+                                     json=first_account,
+                                     content_type='application/json')
+        assert first_response.status_code == 201
+        
+        different_account = {
+            "name": "jane",
+            "surname": "smith",
+            "pesel": "12345678911"
+        }
+        
+        duplicate_response = client.post('/api/accounts',
+                                         json=different_account,
+                                         content_type='application/json')
+        
+        assert duplicate_response.status_code == 409
+    
+    def test_duplicate_pesel_does_not_increase_count(self, client, valid_account_data):
+        client.post('/api/accounts', json=valid_account_data, content_type='application/json')
+        
+        count_before = client.get('/api/accounts/count')
+        initial_count = count_before.get_json()["count"]
+        
+        client.post('/api/accounts', json=valid_account_data, content_type='application/json')
+        
+        count_after = client.get('/api/accounts/count')
+        final_count = count_after.get_json()["count"]
+        
+        assert final_count == initial_count
+    
+    def test_can_create_account_after_deleting_with_same_pesel(self, client, valid_account_data):
+        create_response = client.post('/api/accounts',
+                                      json=valid_account_data,
+                                      content_type='application/json')
+        assert create_response.status_code == 201
+        
+        delete_response = client.delete(f'/api/accounts/{valid_account_data["pesel"]}')
+        assert delete_response.status_code == 200
+        
+        recreate_response = client.post('/api/accounts',
+                                        json=valid_account_data,
+                                        content_type='application/json')
+        assert recreate_response.status_code == 201

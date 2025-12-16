@@ -2,6 +2,7 @@ from src.account import Account
 from src.account import Company_Account
 from src.operations import Transfer_operations
 import pytest
+from unittest.mock import patch, Mock
 
 
 class TestExpressTransfer:
@@ -11,8 +12,21 @@ class TestExpressTransfer:
         return Account("John", "Doe", "65010112345")
     
     @pytest.fixture
-    def company_account(self):
-        return Company_Account("Lockhead_Martin", "12345ABCDE")
+    @patch('src.account.requests.get')
+    def company_account(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "result": {
+                "subject": {
+                    "statusVat": "Czynny",
+                    "name": "Test Company",
+                    "nip": "8461627563"
+                }
+            }
+        }
+        mock_get.return_value = mock_response
+        return Company_Account("Lockhead_Martin", "8461627563")
     
     @pytest.mark.parametrize("account_type,initial_balance,transfer_amount,expected_balance,expected_fee", [
         ("individual", 200, 100, 99, 1),

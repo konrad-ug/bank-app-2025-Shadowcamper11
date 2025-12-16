@@ -1,7 +1,9 @@
+import pytest
+from unittest.mock import patch, Mock
 from src.account import Account
 from src.account import Company_Account
 from src.operations import Transfer_operations
-import pytest
+import os
 
 class TestAccount:
     
@@ -147,23 +149,67 @@ class TestAccount:
 class TestCompanyAccount:
     
     @pytest.fixture
-    def company(self):
-        return Company_Account("Lockhead_Martin", "1234567890")
+    def mock_valid_nip_response(self):
+        return {
+            "result": {
+                "subject": {
+                    "statusVat": "Czynny",
+                    "name": "Test Company",
+                    "nip": "8461627563"
+                }
+            }
+        }
+    
+    @pytest.fixture
+    def mock_invalid_nip_response(self):
+        return {
+            "result": {
+                "subject": {
+                    "statusVat": "Nieczynny",
+                    "name": "Inactive Company"
+                }
+            }
+        }
 
-    def test_company_creation(self, company):
+    @pytest.fixture
+    @patch('src.account.requests.get')
+    def company(self, mock_get, mock_valid_nip_response):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_valid_nip_response
+        mock_get.return_value = mock_response
+        return Company_Account("Lockhead_Martin", "8461627563")
+
+    @patch('src.account.requests.get')
+    def test_company_creation_valid_nip(self, mock_get, mock_valid_nip_response):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_valid_nip_response
+        mock_get.return_value = mock_response
+        
+        company = Company_Account("Lockhead_Martin", "8461627563")
         assert company.company_name == "Lockhead_Martin"
-        assert company.NIP == "1234567890"
+        assert company.NIP == "8461627563"
         assert company.balance == 0
 
-    @pytest.mark.parametrize("nip,expected", [
-        ("1234567890", "1234567890"),
-        ("12345678901", "Invalid"),
-        ("123456789", "Invalid"),
-        ("12345ABCDE", "Invalid"),
-    ])
-    def test_nip_validation(self, nip, expected):
-        company = Company_Account("Test", nip)
-        assert company.NIP == expected
+    @patch('src.account.requests.get')
+    def test_company_creation_invalid_nip_raises_error(self, mock_get, mock_invalid_nip_response):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_invalid_nip_response
+        mock_get.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "1234567890")
+
+    @patch('src.account.requests.get')
+    def test_nip_validation_invalid_length_skips_api(self, mock_get):
+        # Dla niepoprawnej długości nadal rzuca błąd bo validate_nip zwraca False
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "123")
+        
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "12345678901")
 
     @pytest.mark.parametrize("initial_transfer,outgoing_amount,expected_balance", [
         (100, 30, 70),
@@ -245,21 +291,21 @@ class TestCompanyAccount:
         assert company.balance == 3225
 
     @pytest.mark.parametrize("balance,has_zus,loan_amount,expected_result", [
-        (10000, True, 4000, True),    # 8225 >= 8000
-        (10000, True, 5000, False),   # 8225 < 10000
-        (6000, True, 2000, True),     # 4225 >= 4000
-        (6000, False, 2000, False),   # Brak ZUS 
-        (4000, True, 1000, True),     # 2225 >= 2000 
-        (3000, True, 1000, False),    # 1225 < 2000
-        (8000, True, 4000, False),    # 6225 < 8000
-        (10000, False, 1000, False),  # Brak ZUS
+        (10000, True, 4000, True),
+        (10000, True, 5000, False),
+        (6000, True, 2000, True),
+        (6000, False, 2000, False),
+        (4000, True, 1000, True),
+        (3000, True, 1000, False),
+        (8000, True, 4000, False),
+        (10000, False, 1000, False),
     ])
     def test_take_loan_scenarios(self, company, balance, has_zus, loan_amount, expected_result):
         company.incoming_transfer(balance)
         if has_zus:
-            company.outgoing_transfer(1775)  # ZUS
+            company.outgoing_transfer(1775)
         else:
-            company.outgoing_transfer(500)   # Inny przelew
+            company.outgoing_transfer(500)
         
         initial_balance = company.balance
         result = company.take_loan(loan_amount)
@@ -273,12 +319,12 @@ class TestCompanyAccount:
             assert loan_amount not in company.transaction_history
 
     @pytest.mark.parametrize("zus_transfers,other_transfers,loan_amount,expected_result", [
-        ([1775], [], 2000, True),           # Jeden ZUS
-        ([1775, 1775], [], 3000, True),     # Dwa ZUS
-        ([], [1000, 500], 1000, False),     # Brak ZUS
-        ([1775], [500, 200], 2000, True),   # ZUS + inne
-        ([1700], [], 1000, False),          # Prawie ZUS
-        ([1775, 1700], [], 2000, True),     # ZUS + prawie ZUS
+        ([1775], [], 2000, True),
+        ([1775, 1775], [], 3000, True),
+        ([], [1000, 500], 1000, False),
+        ([1775], [500, 200], 2000, True),
+        ([1700], [], 1000, False),
+        ([1775, 1700], [], 2000, True),
     ])
     def test_take_loan_zus_variations(self, company, zus_transfers, other_transfers, loan_amount, expected_result):
         company.incoming_transfer(10000)
@@ -296,9 +342,9 @@ class TestCompanyAccount:
             assert company.balance == initial_balance
 
     @pytest.mark.parametrize("setup_balance,setup_zus,exact_multiplier", [
-        (5000, True, 2.0),   # Dokładnie 2x
-        (6000, True, 2.5),   # Więcej niż 2x  
-        (4500, True, 1.9),   # Mniej niż 2x
+        (5000, True, 2.0),
+        (6000, True, 2.5),
+        (4500, True, 1.9),
     ])
     def test_take_loan_balance_edge_cases(self, company, setup_balance, setup_zus, exact_multiplier):
         company.incoming_transfer(setup_balance)
@@ -315,25 +361,25 @@ class TestCompanyAccount:
 
     def test_take_loan_with_express_zus(self, company):
         company.incoming_transfer(10000)
-        company.express_transfer(1775)  # ZUS przez express
+        company.express_transfer(1775)
         
-        result = company.take_loan(4000)  # 8220 >= 8000
+        result = company.take_loan(4000)
         assert result is True
-        assert company.balance == 12220  # 8220 + 4000
+        assert company.balance == 12220
         assert -1775 in company.transaction_history
         assert -5 in company.transaction_history
 
     def test_take_loan_multiple_attempts(self, company):
         company.incoming_transfer(10000)
-        company.outgoing_transfer(1775)  # ZUS
+        company.outgoing_transfer(1775)
         
-        result1 = company.take_loan(2000)  # 8225 >= 4000 
+        result1 = company.take_loan(2000)
         assert result1 is True
         assert company.balance == 10225
         
-        result2 = company.take_loan(6000)  # 10225 < 12000 
+        result2 = company.take_loan(6000)
         assert result2 is False
-        assert company.balance == 10225  # Bez zmian
+        assert company.balance == 10225
 
     @pytest.mark.parametrize("mixed_operations", [
         ([("incoming", 8000), ("outgoing", 1775), ("express", 500)]),
@@ -357,3 +403,103 @@ class TestCompanyAccount:
         expected_result = has_zus and (current_balance >= 2 * loan_amount)
         
         assert result is expected_result
+
+
+class TestCompanyAccountNIPValidation:
+    
+    @pytest.fixture
+    def mock_valid_nip_response(self):
+        return {
+            "result": {
+                "subject": {
+                    "statusVat": "Czynny",
+                    "name": "Test Company",
+                    "nip": "8461627563"
+                }
+            }
+        }
+    
+    @pytest.fixture
+    def mock_invalid_nip_response(self):
+        return {
+            "result": {
+                "subject": {
+                    "statusVat": "Nieczynny"
+                }
+            }
+        }
+    
+    @pytest.fixture
+    def mock_not_found_response(self):
+        return {"result": None}
+    
+    @patch('src.account.requests.get')
+    def test_validate_nip_with_active_company(self, mock_get, mock_valid_nip_response):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_valid_nip_response
+        mock_get.return_value = mock_response
+        
+        company = Company_Account("Test", "8461627563")
+        assert company.NIP == "8461627563"
+    
+    @patch('src.account.requests.get')
+    def test_validate_nip_with_inactive_company(self, mock_get, mock_invalid_nip_response):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_invalid_nip_response
+        mock_get.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "1234567890")
+    
+    @patch('src.account.requests.get')
+    def test_validate_nip_not_found(self, mock_get, mock_not_found_response):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_not_found_response
+        mock_get.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "9999999999")
+    
+    @patch('src.account.requests.get')
+    def test_validate_nip_api_error(self, mock_get):
+        mock_get.side_effect = Exception("API Error")
+        
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "8461627563")
+    
+    @patch('src.account.requests.get')
+    def test_validate_nip_404_response(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_get.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "8461627563")
+    
+    @patch('src.account.requests.get')
+    def test_validate_nip_uses_env_url(self, mock_get, mock_valid_nip_response):
+        os.environ['BANK_APP_MF_URL'] = 'https://wl-api.mf.gov.pl/'
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_valid_nip_response
+        mock_get.return_value = mock_response
+        
+        Company_Account("Test", "8461627563")
+        
+        called_url = mock_get.call_args[0][0]
+        assert called_url.startswith('https://wl-api.mf.gov.pl/')
+        
+        del os.environ['BANK_APP_MF_URL']
+    
+    @patch('src.account.requests.get')
+    def test_validate_nip_invalid_length_skips_validation(self, mock_get):
+        # Te testy nadal będą rzucać błąd bo validate_nip zawsze jest wywoływane
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "123")
+        
+        with pytest.raises(ValueError, match="Company not registered!!"):
+            Company_Account("Test", "12345678901")

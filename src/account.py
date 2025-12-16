@@ -1,4 +1,7 @@
 from src.operations import Transfer_operations
+import requests
+from datetime import datetime
+import os
 
 class AccountRegistry:
     def __init__(self):
@@ -111,11 +114,14 @@ class Company_Account(Transfer_operations):
         self.NIP = NIP if self.is_NIP_valid(NIP) else "Invalid"
         self.fee = fee
 
+        if not self.validate_nip(NIP):
+            raise ValueError("Company not registered!!")
 
     def is_NIP_valid(self, NIP):
         if len(NIP) == 10 and NIP.isdigit():
             return True
         return False
+    
     
             
     def take_loan(self, amount):
@@ -130,6 +136,25 @@ class Company_Account(Transfer_operations):
         self.transaction_history.append(amount)
         return True
 
-
+    def validate_nip(self, NIP):
+        base_url = os.getenv('BANK_APP_MF_URL', 'https://wl-test.mf.gov.pl/')
+        today = datetime.now().strftime('%Y-%m-%d')
+        url = f"{base_url}api/search/nip/{NIP}?date={today}"
+        
+        try:
+            response = requests.get(url)
+            print(f"MF API Response for NIP {NIP}: {response.json()}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'result' in data and 'subject' in data['result']:
+                    status_vat = data['result']['subject'].get('statusVat')
+                    return status_vat == 'Czynny'
+            
+            return False
+        except Exception as e:
+            print(f"Error validating NIP {NIP}: {e}")
+            return False
+        
             
     

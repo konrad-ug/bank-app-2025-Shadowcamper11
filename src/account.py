@@ -2,6 +2,7 @@ from src.operations import Transfer_operations
 import requests
 from datetime import datetime
 import os
+from lib.smtp import SMTPClient
 
 class AccountRegistry:
     def __init__(self):
@@ -107,6 +108,14 @@ class Account(Transfer_operations):
         
         return False
     
+    def send_history_via_email(self, emial):
+        today = datetime.now().strftime('%Y-%m-%d')
+        subject = f"Account Transfer History {today}"
+        text = f"Personal account history: {self.transaction_history}"
+        smtp_client = SMTPClient()
+        return smtp_client.send(subject, text, emial)
+        
+    
 class Company_Account(Transfer_operations):
     def __init__(self, company_name, NIP, fee =5):
         super().__init__()
@@ -155,6 +164,13 @@ class Company_Account(Transfer_operations):
         except Exception as e:
             print(f"Error validating NIP {NIP}: {e}")
             return False
+    
+    def send_history_via_email(self, emial):
+        today = datetime.now().strftime('%Y-%m-%d')
+        subject = f"Account Transfer History {today}"
+        text = f"Company account history: {self.transaction_history}"
+        smtp_client = SMTPClient()
+        return smtp_client.send(subject, text, emial)
         
             
     

@@ -2,7 +2,12 @@ from src.operations import Transfer_operations
 import requests
 from datetime import datetime
 import os
-from lib.smtp import SMTPClient
+try:
+    from lib.smtp import SMTPClient
+except Exception:
+    # CI or other environments may not expose the top-level `lib` package.
+    # Fallback to the smtp package we also ship at repo root.
+    from smtp.smtp import SMTPClient
 
 class AccountRegistry:
     def __init__(self):

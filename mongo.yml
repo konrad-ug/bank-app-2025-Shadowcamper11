@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo:latest
+    container_name: mongo_container
+    # platform: linux/arm64
+    ports:
+      - "27017:27017"
+    # Uncomment to persist data locally
+    # volumes:
+    #   - mongo_data:/data/db
+    # Example: secure with a root user
+    # environment:
+    #   - MONGO_INITDB_ROOT_USERNAME=admin
+    #   - MONGO_INITDB_ROOT_PASSWORD=example
+
+#volumes:
+#  mongo_data:
+#    driver: local

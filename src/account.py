@@ -5,8 +5,6 @@ import os
 try:
     from lib.smtp import SMTPClient
 except Exception:
-    # CI or other environments may not expose the top-level `lib` package.
-    # Fallback to the smtp package we also ship at repo root.
     from smtp.smtp import SMTPClient
 
 class AccountRegistry:
@@ -119,6 +117,25 @@ class Account(Transfer_operations):
         text = f"Personal account history: {self.transaction_history}"
         smtp_client = SMTPClient()
         return smtp_client.send(subject, text, emial)
+
+    def to_dict(self):
+        return {
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "pesel": self.pesel,
+            "balance": self.balance,
+            "transaction_history": list(self.transaction_history),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        name = data.get('first_name') or data.get('name')
+        last = data.get('last_name') or data.get('surname')
+        pesel = data.get('pesel')
+        acc = cls(name, last, pesel)
+        acc.balance = data.get('balance', 0)
+        acc.transaction_history = list(data.get('transaction_history', []))
+        return acc
         
     
 class Company_Account(Transfer_operations):
@@ -176,6 +193,23 @@ class Company_Account(Transfer_operations):
         text = f"Company account history: {self.transaction_history}"
         smtp_client = SMTPClient()
         return smtp_client.send(subject, text, emial)
+
+    def to_dict(self):
+        return {
+            "company_name": self.company_name,
+            "NIP": self.NIP,
+            "balance": self.balance,
+            "transaction_history": list(self.transaction_history),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        company_name = data.get('company_name') or data.get('name')
+        nip = data.get('NIP') or data.get('nip')
+        acc = cls(company_name, nip)
+        acc.balance = data.get('balance', 0)
+        acc.transaction_history = list(data.get('transaction_history', []))
+        return acc
         
             
     

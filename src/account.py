@@ -15,11 +15,11 @@ class AccountRegistry:
         return iter(self.accounts)
     
     def add_account(self, account):
-        if isinstance(account, Account):
+        # Use duck-typing to avoid issues when Account class is reloaded in tests
+        if hasattr(account, 'pesel'):
             self.accounts.append(account)
             return True
-        else:
-            return False
+        return False
         
     
     def find_account_by_pesel(self, pesel):

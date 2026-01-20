@@ -503,3 +503,11 @@ class TestCompanyAccountNIPValidation:
         
         with pytest.raises(ValueError, match="Company not registered!!"):
             Company_Account("Test", "12345678901")
+
+
+def test_company_validate_nip_handles_exception(monkeypatch):
+    comp = Company_Account.__new__(Company_Account)
+    import src.account as acc_mod
+    monkeypatch.setattr(acc_mod, 'requests', Mock(get=lambda *a, **k: (_ for _ in ()).throw(Exception('net'))))
+
+    assert comp.validate_nip('0000000000') is False

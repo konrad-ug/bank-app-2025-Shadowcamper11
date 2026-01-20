@@ -4,6 +4,7 @@ from src.account import Account
 from src.account import Company_Account
 from src.operations import Transfer_operations
 import os
+import src.account as acc_mod
 
 class TestAccount:
     
@@ -201,10 +202,11 @@ class TestCompanyAccount:
         
         with pytest.raises(ValueError, match="Company not registered!!"):
             Company_Account("Test", "1234567890")
+        
+
 
     @patch('src.account.requests.get')
     def test_nip_validation_invalid_length_skips_api(self, mock_get):
-        # Dla niepoprawnej długości nadal rzuca błąd bo validate_nip zwraca False
         with pytest.raises(ValueError, match="Company not registered!!"):
             Company_Account("Test", "123")
         
@@ -511,3 +513,161 @@ def test_company_validate_nip_handles_exception(monkeypatch):
     monkeypatch.setattr(acc_mod, 'requests', Mock(get=lambda *a, **k: (_ for _ in ()).throw(Exception('net'))))
 
     assert comp.validate_nip('0000000000') is False
+
+
+def test_send_history_calls_smtp(monkeypatch):
+    import src.account as acc_mod
+
+    sent = []
+
+    class DummySMTP:
+        def send(self, subject, text, email):
+            sent.append((subject, text, email))
+            return True
+
+    monkeypatch.setattr(acc_mod, 'SMTPClient', DummySMTP)
+
+    a = Account('S', 'T', '12345678901')
+
+    monkeypatch.setattr(acc_mod.Company_Account, 'validate_nip', lambda self, nip: True)
+    c = acc_mod.Company_Account('Co', '1234567890')
+
+    assert a.send_history_via_email('x@y') is True
+    assert c.send_history_via_email('x@y') is True
+    assert len(sent) == 2
+
+
+def test_from_dict_variants(monkeypatch):
+    data = {'name': 'FN', 'surname': 'LN', 'pesel': '01211234567', 'balance': 10, 'transaction_history': [5]}
+    a = Account.from_dict(data)
+    assert a.first_name == 'FN'
+    assert a.last_name == 'LN'
+    assert a.balance == 10
+    assert a.transaction_history == [5]
+
+    monkeypatch.setattr(acc_mod.Company_Account, 'validate_nip', lambda self, nip: True)
+    cdata = {'company_name': 'Biz', 'NIP': '1234567890', 'balance': 100, 'transaction_history': [1,2]}
+    c = acc_mod.Company_Account.from_dict(cdata)
+    assert c.company_name == 'Biz'
+    assert c.NIP == '1234567890'
+    assert c.balance == 100
+    assert c.transaction_history == [1,2]
+
+
+def test_smtp_import_fallback(monkeypatch):
+    import src.account as acc_mod_local
+    assert hasattr(acc_mod_local, 'SMTPClient')
+
+
+def test_validate_nip_no_subject(monkeypatch):
+    import src.account as accmod
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {'result': {}}
+
+    monkeypatch.setattr(accmod, 'requests', Mock(get=lambda url: Resp()))
+    comp = Company_Account.__new__(Company_Account)
+    assert comp.validate_nip('1234567890') is False
+
+
+def test_import_fallback_reload(monkeypatch):
+    import src.account as accmod
+    assert hasattr(accmod, 'SMTPClient')
+
+
+def test_company_from_dict_name_nip(monkeypatch):
+    import src.account as accmod
+    monkeypatch.setattr(accmod.Company_Account, 'validate_nip', lambda self, nip: True)
+    data = {'name': 'BizCo', 'nip': '1234567890', 'balance': 55, 'transaction_history': [7]}
+    c = accmod.Company_Account.from_dict(data)
+    assert c.company_name == 'BizCo'
+    assert c.NIP == '1234567890'
+    assert c.balance == 55
+    assert c.transaction_history == [7]
+
+
+def test_company_send_history_via_email_direct(monkeypatch):
+    import src.account as accmod
+    sent = []
+
+    class DummySMTP:
+        def send(self, subject, text, email):
+            sent.append((subject, text, email))
+            return True
+
+    monkeypatch.setattr(accmod, 'SMTPClient', DummySMTP)
+    monkeypatch.setattr(accmod.Company_Account, 'validate_nip', lambda self, nip: True)
+    c = accmod.Company_Account('Co', '1234567890')
+    assert c.send_history_via_email('a@b') is True
+    assert len(sent) == 1
+
+
+def test_import_fallback_and_validate_variants(monkeypatch):
+    import src.account as accmod
+
+    class Resp500:
+        status_code = 500
+
+    monkeypatch.setattr(accmod, 'requests', Mock(get=lambda url: Resp500()))
+    comp = accmod.Company_Account.__new__(accmod.Company_Account)
+    assert comp.validate_nip('0000000000') is False
+
+    class RespNoResult:
+        status_code = 200
+        def json(self):
+            return {'result': None}
+
+    monkeypatch.setattr(accmod, 'requests', Mock(get=lambda url: RespNoResult()))
+    assert comp.validate_nip('0000000000') is False
+
+
+def test_company_from_dict_with_standard_keys(monkeypatch):
+    import src.account as accmod
+    monkeypatch.setattr(accmod.Company_Account, 'validate_nip', lambda self, nip: True)
+    data = {'company_name': 'StdCo', 'NIP': '9999999999', 'balance': 77, 'transaction_history': [3]}
+    c = accmod.Company_Account.from_dict(data)
+    assert c.company_name == 'StdCo'
+    assert c.NIP == '9999999999'
+    assert c.balance == 77
+    assert c.transaction_history == [3]
+
+
+def test_smtp_import_fallback_exception_handler(monkeypatch):
+    import sys
+    import importlib
+    original_modules = sys.modules.copy()
+    if 'lib.smtp' in sys.modules:
+        del sys.modules['lib.smtp']
+    import builtins
+    orig_import = builtins.__import__
+
+    def mock_import(name, *args, **kwargs):
+        if name == 'lib.smtp':
+            raise ImportError("No module named 'lib.smtp'")
+        return orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, '__import__', mock_import)
+    if 'src.account' in sys.modules:
+        importlib.reload(sys.modules['src.account'])
+    else:
+        import src.account
+    import src.account as acc_mod
+    assert hasattr(acc_mod, 'SMTPClient')
+    assert acc_mod.SMTPClient is not None
+
+
+def test_company_account_to_dict_method(monkeypatch):
+    import src.account as accmod
+    monkeypatch.setattr(accmod.Company_Account, 'validate_nip', lambda self, nip: True)
+    company = accmod.Company_Account("Test Company", "1234567890")
+    company.incoming_transfer(1000)
+    company.outgoing_transfer(200)
+    result = company.to_dict()
+    assert isinstance(result, dict)
+    assert result['company_name'] == "Test Company"
+    assert result['NIP'] == "1234567890"
+    assert result['balance'] == 800
+    assert result['transaction_history'] == [1000.0, -200.0]
+

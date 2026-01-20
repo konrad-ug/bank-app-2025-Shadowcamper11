@@ -38,6 +38,4 @@ def test_save_and_load_end_to_end():
         rv2 = client_app.post('/api/accounts/load')
         assert rv2.status_code == 200
         assert registry.get_accounts_count() == 1
-
-    # cleanup
     coll.delete_many({})

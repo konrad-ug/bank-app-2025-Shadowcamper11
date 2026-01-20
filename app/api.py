@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from src.account import AccountRegistry, Account
+from src.accounts_repository import create_mongo_repo_from_env
 
 app = Flask(__name__)
 registry = AccountRegistry()
@@ -107,6 +108,38 @@ def transfer(pesel):
             return jsonify({"message": "Zlecenie przyjęto do realizacji"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 422
+
+
+@app.route("/api/accounts/save", methods=['POST'])
+def save_accounts_to_db():
+    try:
+        repo = create_mongo_repo_from_env()
+    except Exception as e:
+        return jsonify({"error": "DB driver not available or connection failed", "details": str(e)}), 500
+
+    try:
+        accounts = registry.get_all_accounts()
+        repo.save_all(accounts)
+        return jsonify({"message": "Saved accounts to DB", "count": len(accounts)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/accounts/load", methods=['POST'])
+def load_accounts_from_db():
+    try:
+        repo = create_mongo_repo_from_env()
+    except Exception as e:
+        return jsonify({"error": "DB driver not available or connection failed", "details": str(e)}), 500
+
+    try:
+        accounts = repo.load_all()
+        registry.accounts.clear()
+        for acc in accounts:
+            registry.add_account(acc)
+        return jsonify({"message": "Loaded accounts from DB", "count": len(accounts)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 

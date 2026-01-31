@@ -102,7 +102,7 @@ def transfer(pesel):
                 return jsonify({"error": "Insufficient funds"}), 422
             return jsonify({"message": "Zlecenie przyjęto do realizacji"}), 200
         elif transfer_type == 'express':
-            success = account.express_outgoing_transfer(amount)
+            success = account.express_transfer(amount)
             if not success:
                 return jsonify({"error": "Insufficient funds"}), 422
             return jsonify({"message": "Zlecenie przyjęto do realizacji"}), 200

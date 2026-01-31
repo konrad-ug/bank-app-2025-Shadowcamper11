@@ -9,6 +9,13 @@ surname:Pieczulis
 group:3
 
 ## How to start the app
-
+instalacja pakietow- pip install -r requirements.txt
+Odpalanie dockera do bazy- docker compose -f mongo.yml up
+Odpalanie flaska- python -m flask run
 
 ## How to execute tests
+wszystkie testy pytest- python -m pytest -q
+behave- python -m behave
+coverage- python -m coverage run --source=src -m pytest
+coverage report python -m coverage report -m
+playwright test ui- npx playwright test tests/
